@@ -19,16 +19,18 @@
 package com.dtstack.chunjun.connector.kafka.sink;
 
 import com.dtstack.chunjun.constants.Metrics;
-import com.dtstack.chunjun.dirty.DirtyConf;
+import com.dtstack.chunjun.dirty.DirtyConfig;
 import com.dtstack.chunjun.dirty.manager.DirtyManager;
 import com.dtstack.chunjun.dirty.utils.DirtyConfUtil;
 import com.dtstack.chunjun.metrics.AccumulatorCollector;
 import com.dtstack.chunjun.metrics.BaseMetric;
+import com.dtstack.chunjun.metrics.RowSizeCalculator;
 import com.dtstack.chunjun.restore.FormatState;
 import com.dtstack.chunjun.util.JsonUtil;
 
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.accumulators.LongCounter;
+import org.apache.flink.api.common.accumulators.LongMaximum;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.api.common.serialization.SerializationSchema;
 import org.apache.flink.streaming.api.CheckpointingMode;
@@ -41,7 +43,6 @@ import org.apache.flink.table.data.RowData;
 import org.apache.flink.types.RowKind;
 import org.apache.flink.util.Preconditions;
 
-import jdk.nashorn.internal.ir.debug.ObjectSizeCalculator;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -97,9 +98,11 @@ public class DynamicKafkaSerializationSchema
     protected FormatState formatState;
     /** 累加器收集器 */
     protected AccumulatorCollector accumulatorCollector;
+    /** 对象大小计算器 */
+    protected RowSizeCalculator rowSizeCalculator;
 
     protected LongCounter bytesWriteCounter;
-    protected LongCounter durationCounter;
+    protected LongMaximum durationCounter;
     protected LongCounter numWriteCounter;
     protected LongCounter snapshotWriteCounter;
     protected LongCounter errCounter;
@@ -107,6 +110,8 @@ public class DynamicKafkaSerializationSchema
     protected LongCounter duplicateErrCounter;
     protected LongCounter conversionErrCounter;
     protected LongCounter otherErrCounter;
+    protected LongCounter nWriteErrors;
+    protected LongCounter errBytes;
     private int[] partitions;
     private transient RuntimeContext runtimeContext;
 
@@ -155,7 +160,9 @@ public class DynamicKafkaSerializationSchema
 
         ExecutionConfig.GlobalJobParameters params =
                 context.getExecutionConfig().getGlobalJobParameters();
-        DirtyConf dc = DirtyConfUtil.parseFromMap(params.toMap());
+        DirtyConfig dc = DirtyConfUtil.parseFromMap(params.toMap());
+
+        initRowSizeCalculator();
         this.dirtyManager = new DirtyManager(dc, context);
 
         initStatisticsAccumulator();
@@ -201,7 +208,7 @@ public class DynamicKafkaSerializationSchema
     protected void beforeSerialize(long size, RowData rowData) {
         updateDuration();
         numWriteCounter.add(size);
-        bytesWriteCounter.add(ObjectSizeCalculator.getObjectSize(rowData));
+        bytesWriteCounter.add(rowSizeCalculator.getObjectSize(rowData));
         if (checkpointEnabled) {
             snapshotWriteCounter.add(size);
         }
@@ -254,7 +261,8 @@ public class DynamicKafkaSerializationSchema
                     valueSerialized,
                     readMetadata(consumedRow, KafkaDynamicSink.WritableMetadata.HEADERS));
         } catch (Exception e) {
-            dirtyManager.collect(consumedRow, e, null);
+            long globalErrors = accumulatorCollector.getAccumulatorValue(Metrics.NUM_ERRORS, false);
+            dirtyManager.collect(consumedRow, e, null, globalErrors);
         }
         return null;
     }
@@ -353,7 +361,10 @@ public class DynamicKafkaSerializationSchema
         numWriteCounter = runtimeContext.getLongCounter(Metrics.NUM_WRITES);
         snapshotWriteCounter = runtimeContext.getLongCounter(Metrics.SNAPSHOT_WRITES);
         bytesWriteCounter = runtimeContext.getLongCounter(Metrics.WRITE_BYTES);
-        durationCounter = runtimeContext.getLongCounter(Metrics.WRITE_DURATION);
+        durationCounter = new LongMaximum(0);
+        if (runtimeContext.getAccumulator(Metrics.WRITE_DURATION) == null) {
+            runtimeContext.addAccumulator(Metrics.WRITE_DURATION, durationCounter);
+        }
 
         outputMetric = new BaseMetric(runtimeContext);
         outputMetric.addMetric(Metrics.NUM_ERRORS, errCounter);
@@ -364,7 +375,6 @@ public class DynamicKafkaSerializationSchema
         outputMetric.addMetric(Metrics.NUM_WRITES, numWriteCounter, true);
         outputMetric.addMetric(Metrics.SNAPSHOT_WRITES, snapshotWriteCounter);
         outputMetric.addMetric(Metrics.WRITE_BYTES, bytesWriteCounter, true);
-        outputMetric.addMetric(Metrics.WRITE_DURATION, durationCounter);
         outputMetric.addDirtyMetric(
                 Metrics.DIRTY_DATA_COUNT, this.dirtyManager.getConsumedMetric());
         outputMetric.addDirtyMetric(
@@ -380,6 +390,11 @@ public class DynamicKafkaSerializationSchema
         accumulatorCollector.start();
     }
 
+    /** 初始化对象大小计算器 */
+    private void initRowSizeCalculator() {
+        rowSizeCalculator = RowSizeCalculator.getRowSizeCalculator();
+    }
+
     /** 从checkpoint状态缓存map中恢复上次任务的指标信息 */
     private void initRestoreInfo() {
         if (formatState == null) {
@@ -390,9 +405,7 @@ public class DynamicKafkaSerializationSchema
             duplicateErrCounter.add(formatState.getMetricValue(Metrics.NUM_DUPLICATE_ERRORS));
             conversionErrCounter.add(formatState.getMetricValue(Metrics.NUM_CONVERSION_ERRORS));
             otherErrCounter.add(formatState.getMetricValue(Metrics.NUM_OTHER_ERRORS));
-
             numWriteCounter.add(formatState.getMetricValue(Metrics.NUM_WRITES));
-
             snapshotWriteCounter.add(formatState.getMetricValue(Metrics.SNAPSHOT_WRITES));
             bytesWriteCounter.add(formatState.getMetricValue(Metrics.WRITE_BYTES));
             durationCounter.add(formatState.getMetricValue(Metrics.WRITE_DURATION));

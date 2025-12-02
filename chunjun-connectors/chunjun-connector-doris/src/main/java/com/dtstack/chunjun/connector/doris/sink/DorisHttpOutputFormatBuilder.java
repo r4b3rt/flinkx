@@ -18,34 +18,19 @@
 
 package com.dtstack.chunjun.connector.doris.sink;
 
-import com.dtstack.chunjun.connector.doris.options.DorisConf;
-import com.dtstack.chunjun.connector.jdbc.conf.JdbcConf;
+import com.dtstack.chunjun.connector.doris.options.DorisConfig;
 import com.dtstack.chunjun.sink.format.BaseRichOutputFormatBuilder;
 
-import java.util.List;
-
-/**
- * Company：www.dtstack.com.
- *
- * @author shitou
- * @date 2021/11/8
- */
-public class DorisHttpOutputFormatBuilder extends BaseRichOutputFormatBuilder {
-
-    private final DorisHttpOutputFormat format;
+public class DorisHttpOutputFormatBuilder
+        extends BaseRichOutputFormatBuilder<DorisHttpOutputFormat> {
 
     public DorisHttpOutputFormatBuilder() {
-        super.format = format = new DorisHttpOutputFormat();
+        super(new DorisHttpOutputFormat());
     }
 
-    public void setDorisOptions(DorisConf options) {
-        JdbcConf jdbcConf = options.setToJdbcConf();
-        format.setOptions(options);
-        format.setConfig(jdbcConf);
-    }
-
-    public void setColumns(List<String> columns) {
-        format.setColumns(columns);
+    public void setDorisOptions(DorisConfig options) {
+        super.setConfig(options);
+        format.setDorisConf(options);
     }
 
     @Override

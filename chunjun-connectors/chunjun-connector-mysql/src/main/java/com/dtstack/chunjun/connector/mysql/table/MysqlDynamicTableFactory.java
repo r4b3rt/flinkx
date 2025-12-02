@@ -18,24 +18,14 @@
 
 package com.dtstack.chunjun.connector.mysql.table;
 
-import com.dtstack.chunjun.connector.jdbc.conf.JdbcConf;
 import com.dtstack.chunjun.connector.jdbc.dialect.JdbcDialect;
+import com.dtstack.chunjun.connector.jdbc.sink.JdbcOutputFormat;
 import com.dtstack.chunjun.connector.jdbc.sink.JdbcOutputFormatBuilder;
+import com.dtstack.chunjun.connector.jdbc.source.JdbcInputFormat;
 import com.dtstack.chunjun.connector.jdbc.source.JdbcInputFormatBuilder;
 import com.dtstack.chunjun.connector.jdbc.table.JdbcDynamicTableFactory;
-import com.dtstack.chunjun.connector.jdbc.util.JdbcUtil;
 import com.dtstack.chunjun.connector.mysql.dialect.MysqlDialect;
-import com.dtstack.chunjun.connector.mysql.sink.MysqlOutputFormat;
-import com.dtstack.chunjun.connector.mysql.source.MysqlInputFormat;
 
-import org.apache.flink.configuration.ReadableConfig;
-import org.apache.flink.table.api.TableSchema;
-
-/**
- * @program: ChunJun
- * @author: wuren
- * @create: 2021/03/17
- */
 public class MysqlDynamicTableFactory extends JdbcDynamicTableFactory {
 
     // 默认是Mysql流式拉取
@@ -60,36 +50,12 @@ public class MysqlDynamicTableFactory extends JdbcDynamicTableFactory {
     }
 
     @Override
-    protected JdbcConf getSourceConnectionConf(ReadableConfig readableConfig) {
-        JdbcConf jdbcConf = super.getSourceConnectionConf(readableConfig);
-        JdbcUtil.putExtParam(jdbcConf);
-        return jdbcConf;
-    }
-
-    @Override
-    protected JdbcConf getSinkConnectionConf(ReadableConfig readableConfig, TableSchema schema) {
-        JdbcConf jdbcConf = super.getSinkConnectionConf(readableConfig, schema);
-        JdbcUtil.putExtParam(jdbcConf);
-        return jdbcConf;
-    }
-
-    /**
-     * 获取JDBC插件的具体inputFormatBuilder
-     *
-     * @return JdbcInputFormatBuilder
-     */
-    @Override
     protected JdbcInputFormatBuilder getInputFormatBuilder() {
-        return new JdbcInputFormatBuilder(new MysqlInputFormat());
+        return new JdbcInputFormatBuilder(new JdbcInputFormat());
     }
 
-    /**
-     * 获取JDBC插件的具体outputFormatBuilder
-     *
-     * @return JdbcOutputFormatBuilder
-     */
     @Override
     protected JdbcOutputFormatBuilder getOutputFormatBuilder() {
-        return new JdbcOutputFormatBuilder(new MysqlOutputFormat());
+        return new JdbcOutputFormatBuilder(new JdbcOutputFormat());
     }
 }

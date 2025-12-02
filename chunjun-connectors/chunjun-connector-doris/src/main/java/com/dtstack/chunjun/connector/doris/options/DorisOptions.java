@@ -23,12 +23,6 @@ import org.apache.flink.configuration.ConfigOptions;
 
 import java.util.List;
 
-/**
- * Company: www.dtstack.com
- *
- * @author xuchao
- * @date 2021-11-21
- */
 public class DorisOptions {
     public static final ConfigOption<List<String>> FENODES =
             ConfigOptions.key("feNodes")
@@ -89,6 +83,12 @@ public class DorisOptions {
             ConfigOptions.key("requestReadTimeoutMs")
                     .intType()
                     .defaultValue(DorisKeys.DORIS_REQUEST_READ_TIMEOUT_MS_DEFAULT)
+                    .withDescription("");
+
+    public static final ConfigOption<Integer> HTTP_CHECK_TIMEOUT_MS =
+            ConfigOptions.key("httpCheckTimeoutS")
+                    .intType()
+                    .defaultValue(DorisKeys.HTTP_CHECK_TIMEOUT_DEFAULT)
                     .withDescription("");
 
     public static final ConfigOption<Integer> REQUEST_QUERY_TIMEOUT_SEC =
@@ -156,4 +156,10 @@ public class DorisOptions {
                     .intType()
                     .defaultValue(DorisKeys.DORIS_BATCH_SIZE_DEFAULT)
                     .withDescription("");
+
+    public static final ConfigOption<Boolean> SINK_ENABLE_DELETE =
+            ConfigOptions.key("sink.enable-delete")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription("whether to enable the delete function");
 }
